@@ -13,169 +13,158 @@ import {
   Card,
   CardContent,
   Typography,
+  Input,
 } from "@mui/material";
 
 export default function Home() {
   const [postprosessorer, setPostprosessorer] = useState([]);
-  const [name, setName] = useState("");
-  const [version, setVersion] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState("");
-  const [editVersion, setEditVersion] = useState("");
+  const [files, setFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const token = localStorage.getItem("token"); // Brukerens token for autentisering
 
+  // Hent postprosessorer og filer
   useEffect(() => {
     fetch("http://localhost:5000/api/postprosessorer")
       .then((response) => response.json())
       .then((data) => setPostprosessorer(data))
       .catch((error) => console.error("Feil ved henting av data:", error));
+
+    fetchFiles();
   }, []);
 
-  const handleAddPostprosessor = async () => {
-    if (!name || !version) {
-      alert("Vennligst fyll ut alle feltene");
+  // Hent opplastede filer
+  const fetchFiles = async () => {
+    if (!token) return;
+    try {
+      const response = await fetch("http://localhost:5000/api/files", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      setFiles(data);
+    } catch (error) {
+      console.error("Feil ved henting av filer:", error);
+    }
+  };
+
+  // Håndter filvalg
+  const handleFileChange = (event) => {
+    setSelectedFile(event.target.files[0]);
+  };
+
+  // Last opp fil
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      alert("Vennligst velg en fil først");
       return;
     }
 
-    const response = await fetch("http://localhost:5000/api/postprosessorer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, version }),
-    });
+    const formData = new FormData();
+    formData.append("file", selectedFile);
 
-    if (response.ok) {
-      const newPostprosessor = await response.json();
-      setPostprosessorer([...postprosessorer, newPostprosessor]);
-      setName("");
-      setVersion("");
-    } else {
-      alert("Feil ved lagring");
+    try {
+      const response = await fetch("http://localhost:5000/api/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (response.ok) {
+        alert("Fil lastet opp!");
+        fetchFiles(); // Oppdater fil-listen
+      } else {
+        alert("Feil ved opplasting");
+      }
+    } catch (error) {
+      console.error("Feil ved filopplasting:", error);
     }
   };
 
-  const handleDeletePostprosessor = async (id) => {
-    const response = await fetch(`http://localhost:5000/api/postprosessorer/${id}`, {
-      method: "DELETE",
-    });
-
-    if (response.ok) {
-      setPostprosessorer(postprosessorer.filter((post) => post.id !== id));
-    } else {
-      alert("Feil ved sletting");
-    }
+  // Last ned fil
+  const handleFileDownload = (filename) => {
+    window.location.href = `http://localhost:5000/api/download/${filename}`;
   };
 
-  const handleEditPostprosessor = (post) => {
-    setEditingId(post.id);
-    setEditName(post.name);
-    setEditVersion(post.version);
-  };
+  // Slett fil
+  const handleFileDelete = async (filename) => {
+    const confirmDelete = window.confirm(`Er du sikker på at du vil slette ${filename}?`);
+    if (!confirmDelete) return;
 
-  const handleSaveEdit = async (id) => {
-    const response = await fetch(`http://localhost:5000/api/postprosessorer/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName, version: editVersion }),
-    });
+    try {
+      const response = await fetch(`http://localhost:5000/api/delete/${filename}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (response.ok) {
-      const updatedPost = await response.json();
-      setPostprosessorer(postprosessorer.map((post) => (post.id === id ? updatedPost : post)));
-      setEditingId(null);
-    } else {
-      alert("Feil ved oppdatering");
+      if (response.ok) {
+        alert("Fil slettet!");
+        fetchFiles(); // Oppdater liste
+      } else {
+        alert("Feil ved sletting");
+      }
+    } catch (error) {
+      console.error("Feil ved sletting av fil:", error);
     }
   };
 
   return (
     <Container maxWidth="md" sx={{ mt: 4 }}>
+      {/* 📂 Filopplasting */}
       <Card variant="outlined" sx={{ mb: 4 }}>
         <CardContent>
           <Typography variant="h5" gutterBottom>
-            Legg til ny postprosessor
+            Last opp filer
           </Typography>
-          <TextField
-            label="Navn"
-            variant="outlined"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            sx={{ mr: 2, mb: 2 }}
-          />
-          <TextField
-            label="Versjon"
-            variant="outlined"
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-            sx={{ mr: 2, mb: 2 }}
-          />
-          <Button variant="contained" color="primary" onClick={handleAddPostprosessor}>
-            Legg til
+          <Input type="file" onChange={handleFileChange} sx={{ mr: 2 }} />
+          <Button variant="contained" color="primary" onClick={handleFileUpload}>
+            Last opp
           </Button>
         </CardContent>
       </Card>
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Navn</TableCell>
-              <TableCell>Versjon</TableCell>
-              <TableCell>Sist Oppdatert</TableCell>
-              <TableCell>Handling</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {postprosessorer.map((post) => (
-              <TableRow key={post.id}>
-                <TableCell>{post.id}</TableCell>
-                <TableCell>
-                  {editingId === post.id ? (
-                    <TextField
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      size="small"
-                    />
-                  ) : (
-                    post.name
-                  )}
-                </TableCell>
-                <TableCell>
-                  {editingId === post.id ? (
-                    <TextField
-                      value={editVersion}
-                      onChange={(e) => setEditVersion(e.target.value)}
-                      size="small"
-                    />
-                  ) : (
-                    post.version
-                  )}
-                </TableCell>
-                <TableCell>{new Date(post.last_updated).toLocaleDateString()}</TableCell>
-                <TableCell>
-                  {editingId === post.id ? (
-                    <Button size="small" variant="contained" color="success" onClick={() => handleSaveEdit(post.id)}>
-                      Lagre
-                    </Button>
-                  ) : (
-                    <Button size="small" variant="outlined" color="secondary" onClick={() => handleEditPostprosessor(post)}>
-                      Rediger
-                    </Button>
-                  )}
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="error"
-                    sx={{ ml: 1 }}
-                    onClick={() => handleDeletePostprosessor(post.id)}
-                  >
-                    Slett
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* 📄 Fil-liste */}
+      <Card variant="outlined" sx={{ mb: 4 }}>
+        <CardContent>
+          <Typography variant="h5" gutterBottom>
+            Opplastede filer
+          </Typography>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Filnavn</TableCell>
+                  <TableCell>Opplastet dato</TableCell>
+                  <TableCell>Handling</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {files.map((file) => (
+                  <TableRow key={file.id}>
+                    <TableCell>{file.filename}</TableCell>
+                    <TableCell>{new Date(file.uploaded_at).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => handleFileDownload(file.filename)}
+                        sx={{ mr: 1 }}
+                      >
+                        Last ned
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={() => handleFileDelete(file.filename)}
+                      >
+                        Slett
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
     </Container>
   );
 }
